@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Build output
+dist
+
+# Source maps
+*.map
+
+# IDE and editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker*
+
+# Documentation
+*.md
+docs
+
+# Tests
+__tests__
+*.test.ts
+*.spec.ts
+coverage
+.nyc_output
+
+# Miscellaneous
+.editorconfig
+.eslintrc*
+.prettierrc*

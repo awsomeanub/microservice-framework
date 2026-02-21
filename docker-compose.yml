@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - ITEM_SERVICE_URL=http://item-service:3000
+      - HTTP_TIMEOUT_MS=30000
+      - HTTP_KEEPALIVE_TIMEOUT_MS=60000
+      - HTTP_MAX_CONNECTIONS=100
+      - HTTP_MAX_CONNECTIONS_PER_HOST=10
+      - RETRY_MAX_ATTEMPTS=3
+      - RETRY_BASE_DELAY_MS=100
+      - RETRY_MAX_DELAY_MS=5000
+      - CIRCUIT_BREAKER_THRESHOLD=5
+      - CIRCUIT_BREAKER_TIMEOUT_MS=30000
+      - CIRCUIT_BREAKER_RESET_TIMEOUT_MS=30000
+      - LOG_LEVEL=info
+      - METRICS_ENABLED=true
+    depends_on:
+      item-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  item-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=microservice_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_POOL_MIN=2
+      - DB_POOL_MAX=10
+      - LOG_LEVEL=info
+      - METRICS_ENABLED=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  postgres:
+    image: public.ecr.aws/docker/library/postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=microservice_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
