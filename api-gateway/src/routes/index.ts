@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { itemsRoutes } from './items.routes';
 import { healthRoutes } from './health.routes';
-import { metricsRoutes } from './metrics.routes';
 
 const router = Router();
 
+// Mount health check endpoint
 router.use('/', healthRoutes);
-router.use('/', metricsRoutes);
+
+// Mount API routes for items proxy
 router.use('/api/v1/items', itemsRoutes);
 
 export { router as routes };

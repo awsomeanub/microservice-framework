@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Validate environment variables with basic required settings
 const envSchema = z.object({
   PORT: z.string().default('3000').transform(Number),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -12,14 +13,8 @@ const envSchema = z.object({
   DB_NAME: z.string().default('microservice_db'),
   DB_USER: z.string().default('postgres'),
   DB_PASSWORD: z.string().default(''),
-  DB_POOL_MIN: z.string().default('2').transform(Number),
-  DB_POOL_MAX: z.string().default('10').transform(Number),
-  DB_IDLE_TIMEOUT_MS: z.string().default('30000').transform(Number),
-  DB_CONNECTION_TIMEOUT_MS: z.string().default('5000').transform(Number),
   
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-  
-  METRICS_ENABLED: z.string().default('true').transform((val) => val === 'true'),
+  LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -29,6 +24,7 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+// Export configuration object with application settings
 export const config = {
   port: parsed.data.PORT,
   nodeEnv: parsed.data.NODE_ENV,
@@ -40,18 +36,10 @@ export const config = {
     database: parsed.data.DB_NAME,
     user: parsed.data.DB_USER,
     password: parsed.data.DB_PASSWORD,
-    min: parsed.data.DB_POOL_MIN,
-    max: parsed.data.DB_POOL_MAX,
-    idleTimeoutMillis: parsed.data.DB_IDLE_TIMEOUT_MS,
-    connectionTimeoutMillis: parsed.data.DB_CONNECTION_TIMEOUT_MS,
   },
   
   logging: {
     level: parsed.data.LOG_LEVEL,
-  },
-  
-  metrics: {
-    enabled: parsed.data.METRICS_ENABLED,
   },
 };
 

@@ -1,94 +1,49 @@
 import { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
-import { AppError } from '../utils/errors';
+import { AppError, ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
-import { ErrorResponse } from '../types/api';
-import { config } from '../config';
 
+// Global error handler middleware for catching all errors
 export const errorHandler: ErrorRequestHandler = (
   err: Error,
   req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
-  const correlationId = req.correlationId || 'unknown';
-
+  // Handle known application errors
   if (err instanceof AppError) {
-    logger.warn(
-      {
-        correlationId,
-        error: {
-          name: err.name,
-          message: err.message,
-          code: err.code,
-          statusCode: err.statusCode,
-          details: err.details,
-        },
-        request: {
-          method: req.method,
-          url: req.url,
-        },
-      },
-      'Application error'
-    );
+    logger.warn(`${err.code}: ${err.message}`);
 
-    const response: ErrorResponse = {
+    res.status(err.statusCode).json({
       success: false,
       error: {
         code: err.code,
         message: err.message,
-        ...(err.details && { details: err.details }),
+        // Include validation details if available
+        ...(err instanceof ValidationError && err.details && { details: err.details }),
       },
-      correlationId,
-      timestamp: new Date().toISOString(),
-    };
-
-    res.status(err.statusCode).json(response);
+    });
     return;
   }
 
-  logger.error(
-    {
-      correlationId,
-      error: {
-        name: err.name,
-        message: err.message,
-        stack: err.stack,
-      },
-      request: {
-        method: req.method,
-        url: req.url,
-      },
-    },
-    'Unhandled error'
-  );
+  // Handle unexpected errors
+  logger.error('Unhandled error:', err);
 
-  const response: ErrorResponse = {
+  res.status(500).json({
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: config.isProduction
-        ? 'An unexpected error occurred'
-        : err.message,
+      message: 'An unexpected error occurred',
     },
-    correlationId,
-    timestamp: new Date().toISOString(),
-  };
-
-  res.status(500).json(response);
+  });
 };
 
+// Handler for requests to undefined routes
 export function notFoundHandler(req: Request, res: Response): void {
-  const correlationId = req.correlationId || 'unknown';
-
-  const response: ErrorResponse = {
+  res.status(404).json({
     success: false,
     error: {
       code: 'NOT_FOUND',
       message: `Route ${req.method} ${req.path} not found`,
     },
-    correlationId,
-    timestamp: new Date().toISOString(),
-  };
-
-  res.status(404).json(response);
+  });
 }

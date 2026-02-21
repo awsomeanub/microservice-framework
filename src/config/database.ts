@@ -1,53 +1,39 @@
-import { Pool, PoolClient, PoolConfig, QueryResult, QueryResultRow } from 'pg';
+import { Pool, QueryResult, QueryResultRow } from 'pg';
 import { config } from './index';
 import { logger } from '../utils/logger';
 
+// Simple database class for PostgreSQL connections
 class Database {
   private pool: Pool | null = null;
-  private isShuttingDown = false;
 
+  // Initialize database connection pool
   async initialize(): Promise<void> {
     if (this.pool) {
       return;
     }
 
-    const poolConfig: PoolConfig = {
+    // Create a connection pool with basic configuration
+    this.pool = new Pool({
       host: config.database.host,
       port: config.database.port,
       database: config.database.database,
       user: config.database.user,
       password: config.database.password,
-      min: config.database.min,
-      max: config.database.max,
-      idleTimeoutMillis: config.database.idleTimeoutMillis,
-      connectionTimeoutMillis: config.database.connectionTimeoutMillis,
-    };
-
-    this.pool = new Pool(poolConfig);
-
-    this.pool.on('error', (err) => {
-      logger.error({ err }, 'Unexpected database pool error');
     });
 
-    this.pool.on('connect', () => {
-      logger.debug('New database connection established');
-    });
-
-    this.pool.on('remove', () => {
-      logger.debug('Database connection removed from pool');
-    });
-
+    // Test the connection by running a simple query
     try {
       const client = await this.pool.connect();
       await client.query('SELECT NOW()');
       client.release();
-      logger.info('Database connection pool initialized successfully');
+      logger.info('Database connected successfully');
     } catch (error) {
-      logger.error({ error }, 'Failed to initialize database connection pool');
+      logger.error('Failed to connect to database:', error);
       throw error;
     }
   }
 
+  // Execute a SQL query with optional parameters
   async query<T extends QueryResultRow = QueryResultRow>(
     text: string,
     params?: unknown[]
@@ -56,45 +42,12 @@ class Database {
       throw new Error('Database pool not initialized');
     }
 
-    const start = Date.now();
-    try {
-      const result = await this.pool.query<T>(text, params);
-      const duration = Date.now() - start;
-      logger.debug({ query: text, duration, rows: result.rowCount }, 'Executed query');
-      return result;
-    } catch (error) {
-      const duration = Date.now() - start;
-      logger.error({ query: text, duration, error }, 'Query execution failed');
-      throw error;
-    }
+    return this.pool.query<T>(text, params);
   }
 
-  async getClient(): Promise<PoolClient> {
-    if (!this.pool) {
-      throw new Error('Database pool not initialized');
-    }
-    return this.pool.connect();
-  }
-
-  async transaction<T>(
-    callback: (client: PoolClient) => Promise<T>
-  ): Promise<T> {
-    const client = await this.getClient();
-    try {
-      await client.query('BEGIN');
-      const result = await callback(client);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
+  // Check if the database connection is healthy
   async healthCheck(): Promise<boolean> {
-    if (!this.pool || this.isShuttingDown) {
+    if (!this.pool) {
       return false;
     }
 
@@ -103,28 +56,6 @@ class Database {
       return result.rowCount === 1;
     } catch {
       return false;
-    }
-  }
-
-  getPoolStats(): { totalCount: number; idleCount: number; waitingCount: number } | null {
-    if (!this.pool) {
-      return null;
-    }
-
-    return {
-      totalCount: this.pool.totalCount,
-      idleCount: this.pool.idleCount,
-      waitingCount: this.pool.waitingCount,
-    };
-  }
-
-  async close(): Promise<void> {
-    this.isShuttingDown = true;
-    if (this.pool) {
-      logger.info('Closing database connection pool...');
-      await this.pool.end();
-      this.pool = null;
-      logger.info('Database connection pool closed');
     }
   }
 }

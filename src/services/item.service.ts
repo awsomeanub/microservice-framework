@@ -1,17 +1,18 @@
 import { v4 as uuidv4 } from 'uuid';
 import { database } from '../config/database';
 import { Item, CreateItemDto, UpdateItemDto, PaginatedResponse } from '../types/item';
-import { NotFoundError, DatabaseError } from '../utils/errors';
-import { dbQueryDuration } from '../utils/metrics';
+import { NotFoundError } from '../utils/errors';
 import { logger } from '../utils/logger';
 
+// Service class handling business logic for item operations
 export class ItemService {
   private readonly tableName = 'items';
 
+  // Create a new item in the database
   async create(data: CreateItemDto): Promise<Item> {
+    // Generate unique ID and timestamps
     const id = uuidv4();
     const now = new Date();
-    const timer = dbQueryDuration.startTimer({ operation: 'insert', table: this.tableName });
 
     try {
       const result = await database.query<Item>(
@@ -21,46 +22,43 @@ export class ItemService {
         [id, data.name, data.description || null, data.price, data.quantity, now, now]
       );
 
-      timer();
       return result.rows[0];
     } catch (error) {
-      timer();
-      logger.error({ error, data }, 'Failed to create item');
-      throw new DatabaseError('Failed to create item', error);
+      logger.error('Failed to create item:', error);
+      throw error;
     }
   }
 
+  // Find a single item by its ID
   async findById(id: string): Promise<Item> {
-    const timer = dbQueryDuration.startTimer({ operation: 'select', table: this.tableName });
-
     try {
       const result = await database.query<Item>(
         `SELECT * FROM ${this.tableName} WHERE id = $1`,
         [id]
       );
 
-      timer();
-
+      // Throw 404 error if item not found
       if (result.rowCount === 0) {
         throw new NotFoundError('Item', id);
       }
 
       return result.rows[0];
     } catch (error) {
-      timer();
       if (error instanceof NotFoundError) {
         throw error;
       }
-      logger.error({ error, id }, 'Failed to find item by id');
-      throw new DatabaseError('Failed to find item', error);
+      logger.error('Failed to find item:', error);
+      throw error;
     }
   }
 
+  // Get paginated list of all items
   async findAll(page: number, limit: number): Promise<PaginatedResponse<Item>> {
+    // Calculate offset for pagination
     const offset = (page - 1) * limit;
-    const timer = dbQueryDuration.startTimer({ operation: 'select', table: this.tableName });
 
     try {
+      // Fetch items and total count in parallel
       const [dataResult, countResult] = await Promise.all([
         database.query<Item>(
           `SELECT * FROM ${this.tableName} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
@@ -71,8 +69,6 @@ export class ItemService {
           []
         ),
       ]);
-
-      timer();
 
       const total = parseInt(countResult.rows[0].count, 10);
       const totalPages = Math.ceil(total / limit);
@@ -87,18 +83,18 @@ export class ItemService {
         },
       };
     } catch (error) {
-      timer();
-      logger.error({ error, page, limit }, 'Failed to find all items');
-      throw new DatabaseError('Failed to retrieve items', error);
+      logger.error('Failed to find items:', error);
+      throw error;
     }
   }
 
+  // Update an existing item by ID
   async update(id: string, data: UpdateItemDto): Promise<Item> {
-    const timer = dbQueryDuration.startTimer({ operation: 'update', table: this.tableName });
-
     try {
+      // Verify item exists before updating
       await this.findById(id);
 
+      // Build dynamic update query based on provided fields
       const fields: string[] = [];
       const values: unknown[] = [];
       let paramIndex = 1;
@@ -120,6 +116,7 @@ export class ItemService {
         values.push(data.quantity);
       }
 
+      // Always update the updated_at timestamp
       fields.push(`updated_at = $${paramIndex++}`);
       values.push(new Date());
 
@@ -130,37 +127,32 @@ export class ItemService {
         values
       );
 
-      timer();
       return result.rows[0];
     } catch (error) {
-      timer();
       if (error instanceof NotFoundError) {
         throw error;
       }
-      logger.error({ error, id, data }, 'Failed to update item');
-      throw new DatabaseError('Failed to update item', error);
+      logger.error('Failed to update item:', error);
+      throw error;
     }
   }
 
+  // Delete an item by ID
   async delete(id: string): Promise<void> {
-    const timer = dbQueryDuration.startTimer({ operation: 'delete', table: this.tableName });
-
     try {
+      // Verify item exists before deleting
       await this.findById(id);
 
       await database.query(
         `DELETE FROM ${this.tableName} WHERE id = $1`,
         [id]
       );
-
-      timer();
     } catch (error) {
-      timer();
       if (error instanceof NotFoundError) {
         throw error;
       }
-      logger.error({ error, id }, 'Failed to delete item');
-      throw new DatabaseError('Failed to delete item', error);
+      logger.error('Failed to delete item:', error);
+      throw error;
     }
   }
 }
